@@ -1,0 +1,59 @@
+image: synthetic_noise.bmp
+resolution: 6000 x 4000
+model	grayscale	gaussian_blur	sobel_filter
+sequential	225	4366 2335
+openmp	    71	567	 539
+mpi_1	    68	655	 473
+mpi_4	    99	668	 489
+mpi_8	    111	682	 697
+mpi_16	    101	694	 618
+
+image: cityscape.bmp
+resoution: 5472 x 3648
+model	grayscale	gaussian_blur	sobel_filter
+sequential	190	3560 1969
+openmp	    54	433	 324
+mpi_1	    84	494	 329
+mpi_4	    81	539	 343
+mpi_8	    60	564	 422
+mpi_16	    57	589	 360
+
+image: architecture.bmp
+resolution: 6000 x 4000
+model	grayscale	gaussian_blur	sobel_filter
+sequential	231	4262 2339
+openmp	    52	476	 354
+mpi_1	    96	580	 491
+mpi_4	    72	629	 420
+mpi_8	    68	667	 524
+mpi_16	    65	684	 483
+
+image: architecture.bmp
+resolution: 4928 x 3280
+model	grayscale	gaussian_blur	sobel_filter
+sequential	190	3154 2053
+openmp	    51	362	 259
+mpi_1	    72	426	 325
+mpi_4	    46	580	 406
+mpi_8	    52	470	 284
+mpi_16	    47	485	 317
+
+image: texture.bmp
+resolution: 3589 x 5384
+model	grayscale	gaussian_blur	sobel_filter
+sequential	181	3539 2106
+openmp	    42	413	 343
+mpi_1	    57	611	 415
+mpi_4	    62	529	 340
+mpi_8	    56	555	 337
+mpi_16	    55	571	 368
+
+image: cat
+resolution: 3961 x 5546
+model	grayscale	gaussian_blur	sobel_filter
+sequential	209	3984 2214
+openmp	    54	543	336
+mpi_1	    91	548	423
+mpi_4	    98	586	392
+mpi_8	    66	615	413
+mpi_16	    59	631	388

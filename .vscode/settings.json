@@ -1,0 +1,7 @@
+{
+  "C_Cpp.default.includePath": [
+    "C:/Program Files (x86)/Microsoft SDKs/MPI/Include",
+    "${workspaceFolder}/**"
+  ],
+  "C_Cpp.default.compilerPath": "C:/MinGW/bin/gcc.exe"
+}
