@@ -1,25 +1,26 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 #include <omp.h>
 #include "mpi.h"
 #include "bmpimage.h"
 #include "bmpfunctions.h"
 
-// Sobel Kernels
-const int SOBEL_X[3][3] = {
+/* Sobel Kernels */
+static const int SOBEL_X[3][3] = {
     {-1, 0, 1},
     {-2, 0, 2},
     {-1, 0, 1}
 };
 
-const int SOBEL_Y[3][3] = {
+static const int SOBEL_Y[3][3] = {
     {-1, -2, -1},
     { 0,  0,  0},
     { 1,  2,  1}
 };
 
-void applyLocalSobel(unsigned char *data, int *gradient, int width, int height, int bpp, int is_vertical)
+static void applyLocalSobel(unsigned char *data, int *gradient, int width, int height, int bpp, int is_vertical)
 {
     int y;
     #pragma omp parallel for schedule(static)
@@ -44,7 +45,7 @@ void applyLocalSobel(unsigned char *data, int *gradient, int width, int height, 
     }
 }
 
-void computeLocalGradient(int *grad_x, int *grad_y, unsigned char *dst, int width, int height, int bpp)
+static void computeLocalGradient(int *grad_x, int *grad_y, unsigned char *dst, int width, int height, int bpp)
 {
     int y;
     #pragma omp parallel for schedule(static)
@@ -76,7 +77,6 @@ void BMP_Sobel_Hybrid(BMP_Image *img, int rank, int size)
     int remainder = height % size;
 
     int local_height = rows_per_proc + (rank < remainder ? 1 : 0);
-    int start_row = rank * rows_per_proc + (rank < remainder ? rank : remainder);
 
     int local_size = local_height * width * bpp;
     int padded_height = local_height + 2;
@@ -85,11 +85,18 @@ void BMP_Sobel_Hybrid(BMP_Image *img, int rank, int size)
     unsigned char *local_data = (unsigned char *)malloc(local_size);
     unsigned char *padded_data = (unsigned char *)calloc(padded_size, 1);
     unsigned char *local_result = (unsigned char *)malloc(local_size);
-    int *grad_x = (int *)malloc(padded_height * width * sizeof(int));
-    int *grad_y = (int *)malloc(padded_height * width * sizeof(int));
+    int *grad_x = (int *)calloc(padded_height * width, sizeof(int));
+    int *grad_y = (int *)calloc(padded_height * width, sizeof(int));
 
     int *sendcounts = (int *)malloc(size * sizeof(int));
     int *displs = (int *)malloc(size * sizeof(int));
+
+    if (!local_data || !padded_data || !local_result || !grad_x || !grad_y || !sendcounts || !displs)
+    {
+        fprintf(stderr, "Error: Memory allocation failed in Sobel_Hybrid\n");
+        MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+    }
+
     int offset = 0;
     int i;
     for (i = 0; i < size; i++)

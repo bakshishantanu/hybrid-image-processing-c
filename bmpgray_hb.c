@@ -27,6 +27,12 @@ void BMP_Gray_Hybrid(BMP_Image *img, int rank, int size)
     int *sendcounts = (int *)malloc(size * sizeof(int));
     int *displs = (int *)malloc(size * sizeof(int));
 
+    if (!local_data || !sendcounts || !displs)
+    {
+        fprintf(stderr, "Error: Memory allocation failed in Gray_Hybrid\n");
+        MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+    }
+
     int offset = 0;
     int i;
     for (i = 0; i < size; i++)

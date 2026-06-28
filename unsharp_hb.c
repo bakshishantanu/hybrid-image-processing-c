@@ -10,6 +10,7 @@
 
 #define KERNEL_SIZE 5
 #define SIGMA 1.5
+#define UNSHARP_AMOUNT 1.5
 
 static void generateKernel(double *kernel, int size, double sigma)
 {
@@ -71,7 +72,7 @@ static void OneDLocalBlur(unsigned char *src, unsigned char *dest, int width, in
     }
 }
 
-void BMP_GaussianBlur_Hybrid(BMP_Image *img, int rank, int size)
+void BMP_UnsharpMask_Hybrid(BMP_Image *img, int rank, int size)
 {
     int width = img->width;
     int height = img->height;
@@ -81,24 +82,23 @@ void BMP_GaussianBlur_Hybrid(BMP_Image *img, int rank, int size)
 
     int rows_per_proc = height / size;
     int remainder = height % size;
-
     int local_height = rows_per_proc + (rank < remainder ? 1 : 0);
     int local_size = local_height * row_size;
 
-    /* Pad by half rows on each side for the vertical blur kernel */
     int padded_height = local_height + 2 * half;
     int padded_size = padded_height * row_size;
 
     unsigned char *local_data = (unsigned char *)malloc(local_size);
+    unsigned char *local_original = (unsigned char *)malloc(local_size);
     unsigned char *local_hblur = (unsigned char *)malloc(local_size);
     unsigned char *local_padded = (unsigned char *)calloc(padded_size, 1);
     unsigned char *temp_vblur = (unsigned char *)malloc(padded_size);
     unsigned char *local_vblur = (unsigned char *)malloc(local_size);
     double kernel[KERNEL_SIZE];
 
-    if (!local_data || !local_hblur || !local_padded || !temp_vblur || !local_vblur)
+    if (!local_data || !local_original || !local_hblur || !local_padded || !temp_vblur || !local_vblur)
     {
-        fprintf(stderr, "Error: Memory allocation failed in GaussianBlur_Hybrid\n");
+        fprintf(stderr, "Error: Memory allocation failed in UnsharpMask_Hybrid\n");
         MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
     }
 
@@ -123,15 +123,18 @@ void BMP_GaussianBlur_Hybrid(BMP_Image *img, int rank, int size)
     MPI_Scatterv(img->data, sendcounts, displs, MPI_UNSIGNED_CHAR,
                  local_data, local_size, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 
+    /* Save original local data before blurring */
+    memcpy(local_original, local_data, local_size);
+
     generateKernel(kernel, KERNEL_SIZE, SIGMA);
 
-    /* Horizontal blur — no ghost rows needed (1D along width) */
+    /* Horizontal blur — no ghost rows needed */
     OneDLocalBlur(local_data, local_hblur, width, local_height, bpp, kernel, KERNEL_SIZE, 0);
 
-    /* Build padded buffer: place hblur result in the center */
+    /* Build padded buffer for vertical blur */
     memcpy(local_padded + half * row_size, local_hblur, local_size);
 
-    /* Exchange ghost rows (half rows per side) with neighbors */
+    /* Exchange ghost rows with neighbors */
     if (rank > 0)
     {
         MPI_Sendrecv(local_hblur, half * row_size, MPI_UNSIGNED_CHAR, rank - 1, 0,
@@ -150,13 +153,25 @@ void BMP_GaussianBlur_Hybrid(BMP_Image *img, int rank, int size)
     /* Vertical blur on full padded buffer */
     OneDLocalBlur(local_padded, temp_vblur, width, padded_height, bpp, kernel, KERNEL_SIZE, 1);
 
-    /* Extract the center local_height rows from the vertical blur result */
+    /* Extract center rows = blurred result */
     memcpy(local_vblur, temp_vblur + half * row_size, local_size);
 
-    MPI_Gatherv(local_vblur, local_size, MPI_UNSIGNED_CHAR,
+    /* Apply unsharp mask: output = clamp(original + amount * (original - blurred)) */
+    int pixel;
+    #pragma omp parallel for schedule(static)
+    for (pixel = 0; pixel < local_size; pixel++)
+    {
+        double val = local_original[pixel] + UNSHARP_AMOUNT * ((double)local_original[pixel] - (double)local_vblur[pixel]);
+        if (val < 0.0) val = 0.0;
+        if (val > 255.0) val = 255.0;
+        local_data[pixel] = (unsigned char)(val + 0.5);
+    }
+
+    MPI_Gatherv(local_data, local_size, MPI_UNSIGNED_CHAR,
                 img->data, sendcounts, displs, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 
     free(local_data);
+    free(local_original);
     free(local_hblur);
     free(local_padded);
     free(temp_vblur);

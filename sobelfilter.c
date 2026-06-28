@@ -5,19 +5,19 @@
 #include "bmpfunctions.h"
 
 // Sobel Kernels
-int SOBEL_X[3][3] = {
+static const int SOBEL_X[3][3] = {
     {-1, 0, 1},
     {-2, 0, 2},
     {-1, 0, 1}
 };
 
-int SOBEL_Y[3][3] = {
+static const int SOBEL_Y[3][3] = {
     {-1, -2, -1},
     {0,  0,  0},
     {1,  2,  1}
 };
 
-void applySobel(BMP_Image *img, int *gradient, int is_vertical)
+static void applySobel(BMP_Image *img, int *gradient, int is_vertical)
 {
     int width = img->width;
     int height = img->height;
@@ -46,7 +46,7 @@ void applySobel(BMP_Image *img, int *gradient, int is_vertical)
     }
 }
 
-void computeGradient(int *grad_x, int *grad_y, BMP_Image *img)
+static void computeGradient(int *grad_x, int *grad_y, BMP_Image *img)
 {
     int width = img->width;
     int height = img->height;

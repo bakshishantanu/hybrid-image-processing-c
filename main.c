@@ -24,9 +24,23 @@
 
 int main(int argc, char **argv)
 {
-    if (argc < 5) 
+    /* Check for --csv flag */
+    int csv_mode = 0;
+    for (int i = 1; i < argc; i++)
     {
-        printf("Usage: image <input> <gray> <blur> <sobel>\n");
+        if (strcmp(argv[i], "--csv") == 0)
+        {
+            csv_mode = 1;
+            for (int j = i; j < argc - 1; j++)
+                argv[j] = argv[j + 1];
+            argc--;
+            break;
+        }
+    }
+
+    if (argc < 6) 
+    {
+        printf("Usage: image <input> <gray> <blur> <sobel> <unsharp> [--csv]\n");
         return EXIT_FAILURE;
     }
 
@@ -36,44 +50,115 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    printf("Loaded %s: %ux%u (%u bpp)\n", argv[1], img->width, img->height, img->bytes_per_pixel * 8);
+    int threads = 1;
+    #ifdef _OPENMP
+    threads = omp_get_max_threads();
+    #endif
+
+    if (!csv_mode)
+    {
+        printf("Loaded %s: %ux%u (%u bpp)", argv[1], img->width, img->height, img->bytes_per_pixel * 8);
+        #ifdef _OPENMP
+        printf(", %d OpenMP threads", threads);
+        #endif
+        printf("\n");
+    }
+
+    /* Save original image data for unsharp mask (Sobel destroys it) */
+    unsigned char *original_data = (unsigned char *)malloc(img->data_size);
+    if (original_data)
+    {
+        memcpy(original_data, img->data, img->data_size);
+    }
 
     TIMER_TYPE start, end;
+    double gray_ms, blur_ms, sobel_ms, unsharp_ms;
 
+    /* Grayscale */
     start = TIMER_NOW();
     BMP_Gray(img);
     end = TIMER_NOW();
-    printf("Grayscale time: %.3f ms\n", TIMER_MS(start, end));
+    gray_ms = TIMER_MS(start, end);
+    if (!csv_mode) printf("Grayscale time: %.3f ms\n", gray_ms);
 
     if (BMP_Save(img, argv[2]) == 0)
     {
         printf("Output file invalid!\n");
         BMP_Destroy(img);
+        free(original_data);
         return EXIT_FAILURE;
     }
 
+    /* Gaussian Blur */
     start = TIMER_NOW();
     BMP_GaussianBlur(img);
     end = TIMER_NOW();
-    printf("Gaussian blur time: %.3f ms\n", TIMER_MS(start, end));
+    blur_ms = TIMER_MS(start, end);
+    if (!csv_mode) printf("Gaussian blur time: %.3f ms\n", blur_ms);
 
     if (BMP_Save(img, argv[3]) == 0)
     {
         printf("Output file invalid!\n");
         BMP_Destroy(img);
+        free(original_data);
         return EXIT_FAILURE;
     }
 
+    /* Sobel */
     start = TIMER_NOW();
     BMP_Sobel(img);
     end = TIMER_NOW();
-    printf("Sobel filter time: %.3f ms\n", TIMER_MS(start, end));
+    sobel_ms = TIMER_MS(start, end);
+    if (!csv_mode) printf("Sobel filter time: %.3f ms\n", sobel_ms);
 
     if (BMP_Save(img, argv[4]) == 0)
     {
         printf("Output file invalid!\n");
         BMP_Destroy(img);
+        free(original_data);
         return EXIT_FAILURE;
+    }
+
+    /* Restore original image for unsharp mask */
+    if (original_data)
+    {
+        memcpy(img->data, original_data, img->data_size);
+        free(original_data);
+        original_data = NULL;
+    }
+
+    /* Unsharp Mask */
+    start = TIMER_NOW();
+    BMP_UnsharpMask(img);
+    end = TIMER_NOW();
+    unsharp_ms = TIMER_MS(start, end);
+    if (!csv_mode) printf("Unsharp mask time: %.3f ms\n", unsharp_ms);
+
+    if (BMP_Save(img, argv[5]) == 0)
+    {
+        printf("Output file invalid!\n");
+        BMP_Destroy(img);
+        return EXIT_FAILURE;
+    }
+
+    double total_ms = gray_ms + blur_ms + sobel_ms + unsharp_ms;
+
+    if (csv_mode)
+    {
+        #ifdef _OPENMP
+        const char *model = "openmp";
+        #else
+        const char *model = "sequential";
+        #endif
+        printf("%s,%s,%u,%u,%u,%.3f,%.3f,%.3f,%.3f,%.3f,%d,1\n",
+               model, argv[1], img->width, img->height,
+               img->width * img->height,
+               gray_ms, blur_ms, sobel_ms, unsharp_ms, total_ms,
+               threads);
+    }
+    else
+    {
+        printf("Total time: %.3f ms\n", total_ms);
     }
 
     BMP_Destroy(img);

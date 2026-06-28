@@ -1,7 +1,7 @@
 #include "bmpfunctions.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <omp.h>
+#include <string.h>
 
 #define _USE_MATH_DEFINES
 #include <math.h>
@@ -9,7 +9,7 @@
 #define KERNEL_SIZE 5
 #define SIGMA 1.5
 
-void generateKernel(double *kernel, int size, double sigma)
+static void generateKernel(double *kernel, int size, double sigma)
 {
     double sum = 0.0;
     int half_size = size / 2;
@@ -27,7 +27,7 @@ void generateKernel(double *kernel, int size, double sigma)
     }
 }
 
-void OneDBlur(BMP_Image *img, unsigned char *temp_data, double *kernel, int size, int is_vertical)
+static void OneDBlur(BMP_Image *img, unsigned char *temp_data, const double *kernel, int size, int is_vertical)
 {
     int width = img->width;
     int height = img->height;
@@ -83,16 +83,10 @@ void BMP_GaussianBlur(BMP_Image *img)
     }
     
     OneDBlur(img, temp_data, kernel, KERNEL_SIZE, 0);
-    for (int i = 0; i < img->data_size; i++)
-    {
-        img->data[i] = temp_data[i];
-    }
+    memcpy(img->data, temp_data, img->data_size);
     
     OneDBlur(img, temp_data, kernel, KERNEL_SIZE, 1);
-    for (int i = 0; i < img->data_size; i++)
-    {
-        img->data[i] = temp_data[i];
-    }
+    memcpy(img->data, temp_data, img->data_size);
     
     free(temp_data);
 }
