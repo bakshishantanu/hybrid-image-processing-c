@@ -1,16 +1,31 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include "bmpimage.h"
 #include "bmpfile.h"
 #include "bmpfunctions.h"
+
+/*
+ * High-resolution wall-clock timer.
+ * When compiled with -fopenmp, uses omp_get_wtime() (nanosecond resolution).
+ * Otherwise falls back to clock() (1ms resolution on Windows ucrt).
+ */
+#ifdef _OPENMP
+    #include <omp.h>
+    #define TIMER_TYPE    double
+    #define TIMER_NOW()   omp_get_wtime()
+    #define TIMER_MS(s,e) (((e) - (s)) * 1000.0)
+#else
+    #include <time.h>
+    #define TIMER_TYPE    clock_t
+    #define TIMER_NOW()   clock()
+    #define TIMER_MS(s,e) (1000.0 * ((e) - (s)) / CLOCKS_PER_SEC)
+#endif
 
 int main(int argc, char **argv)
 {
     if (argc < 5) 
     {
-        // Usage on cmd: image input.bmp output.bmp
         printf("Usage: image <input> <gray> <blur> <sobel>\n");
         return EXIT_FAILURE;
     }
@@ -21,10 +36,14 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    clock_t start_gray = clock();
+    printf("Loaded %s: %ux%u (%u bpp)\n", argv[1], img->width, img->height, img->bytes_per_pixel * 8);
+
+    TIMER_TYPE start, end;
+
+    start = TIMER_NOW();
     BMP_Gray(img);
-    clock_t end_gray = clock();
-    printf("Grayscale time: %.3f ms\n", 1000.0 * (end_gray - start_gray) / CLOCKS_PER_SEC);
+    end = TIMER_NOW();
+    printf("Grayscale time: %.3f ms\n", TIMER_MS(start, end));
 
     if (BMP_Save(img, argv[2]) == 0)
     {
@@ -33,10 +52,10 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    clock_t start_blur = clock();
+    start = TIMER_NOW();
     BMP_GaussianBlur(img);
-    clock_t end_blur = clock();
-    printf("Gaussian blur time: %.3f ms\n", 1000.0 * (end_blur - start_blur) / CLOCKS_PER_SEC);
+    end = TIMER_NOW();
+    printf("Gaussian blur time: %.3f ms\n", TIMER_MS(start, end));
 
     if (BMP_Save(img, argv[3]) == 0)
     {
@@ -45,10 +64,10 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    clock_t start_sobel = clock();
+    start = TIMER_NOW();
     BMP_Sobel(img);
-    clock_t end_sobel = clock();
-    printf("Sobel filter time: %.3f ms\n", 1000.0 * (end_sobel - start_sobel) / CLOCKS_PER_SEC);
+    end = TIMER_NOW();
+    printf("Sobel filter time: %.3f ms\n", TIMER_MS(start, end));
 
     if (BMP_Save(img, argv[4]) == 0)
     {

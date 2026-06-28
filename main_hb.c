@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <mpi.h>
 #include "bmpimage.h"
 #include "bmpfile.h"
@@ -21,7 +20,6 @@ int main(int argc, char **argv)
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     BMP_Image *img = NULL;
-    clock_t start, end;
 
     if (rank == 0)
     {
@@ -30,9 +28,12 @@ int main(int argc, char **argv)
         {
             MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
         }
+        printf("Loaded %s: %ux%u (%u bpp), %d MPI processes\n",
+               argv[1], img->width, img->height, img->bytes_per_pixel * 8, size);
     }
 
-    int width, height, bpp;
+    /* Zero-init to avoid UB — MPI_Bcast overwrites from root */
+    int width = 0, height = 0, bpp = 0;
     if (rank == 0)
     {
         width = img->width;
@@ -50,15 +51,18 @@ int main(int argc, char **argv)
         img->width = width;
         img->height = height;
         img->bytes_per_pixel = bpp;
-        img->data = (unsigned char *)malloc(width * height * bpp);
+        img->data_size = width * height * bpp;
+        img->data = (unsigned char *)malloc(img->data_size + 16);
     }
 
-    if (rank == 0) start = clock();
+    double start, end;
+
+    start = MPI_Wtime();
     BMP_Gray_Hybrid(img, rank, size);
+    end = MPI_Wtime();
     if (rank == 0)
     {
-        end = clock();
-        printf("Grayscale time: %.3f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+        printf("Grayscale time: %.3f ms\n", 1000.0 * (end - start));
         if (BMP_Save(img, argv[2]) == 0)
         {
             printf("Output file invalid!\n");
@@ -67,12 +71,12 @@ int main(int argc, char **argv)
         }
     }
 
-    if (rank == 0) start = clock();
+    start = MPI_Wtime();
     BMP_GaussianBlur_Hybrid(img, rank, size);
+    end = MPI_Wtime();
     if (rank == 0)
     {
-        end = clock();
-        printf("Gaussian blur time: %.3f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+        printf("Gaussian blur time: %.3f ms\n", 1000.0 * (end - start));
         if (BMP_Save(img, argv[3]) == 0)
         {
             printf("Output file invalid!\n");
@@ -81,12 +85,12 @@ int main(int argc, char **argv)
         }
     }
 
-    if (rank == 0) start = clock();
+    start = MPI_Wtime();
     BMP_Sobel_Hybrid(img, rank, size);
+    end = MPI_Wtime();
     if (rank == 0)
     {
-        end = clock();
-        printf("Sobel filter time: %.3f ms\n", 1000.0 * (end - start) / CLOCKS_PER_SEC);
+        printf("Sobel filter time: %.3f ms\n", 1000.0 * (end - start));
         if (BMP_Save(img, argv[4]) == 0)
         {
             printf("Output file invalid!\n");
