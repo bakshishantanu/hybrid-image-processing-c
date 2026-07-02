@@ -1,0 +1,39 @@
+# Graphify output
+graphify-out/
+
+# Graphify agent files
+.agents/
+
+# VS Code
+.vscode/
+
+# Git
+.git/
+
+# Build artifacts
+*.exe
+*.o
+*.obj
+*.out
+
+# Generated benchmark data
+results/
+*.csv
+
+# Documentation
+LICENSE
+*.txt
+*.md
+*.pdf
+*.docx
+
+# Batch scripts
+*.bat
+
+# Images
+*.bmp
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
