@@ -43,6 +43,8 @@ _ref_*.bmp
 # Ignore all Graphify generated knowledge graphs, caches, and metadata
 graphify-out/
 .graphify/
+.graphifyignore
+.agents/
 
 # ==============================================================================
 # IDE & Environment Files
