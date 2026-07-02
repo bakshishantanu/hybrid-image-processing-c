@@ -7,17 +7,31 @@ This document illustrates the core architectural concepts of the Hybrid Image Pr
 The core pipeline is identical across all models. The filters run in a strict sequence because each stage depends on the exact output of the preceding stage. By executing these sequentially but parallelizing the *internal workload* of each filter, we maximize throughput.
 
 ```mermaid
-graph TD
-    A([Input BMP]) -->|Read from Disk| B(Grayscale Conversion)
-    B -->|Memory Buffer| C(Separable Gaussian Blur)
-    C -->|Memory Buffer| D(Sobel Edge Detection)
-    D -->|Memory Buffer| E(Unsharp Mask)
-    E -->|Write to Disk| F([Output BMP])
-    
-    classDef file fill:#f9f9f9,stroke:#333,stroke-width:2px;
-    classDef filter fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
-    class A,F file;
-    class B,C,D,E filter;
+flowchart LR
+    subgraph Input["Input Stage"]
+        A["24-bit BMP Image"]
+    end
+
+    subgraph Pipeline["Image Processing Pipeline"]
+        B["Grayscale\nRGB → Luminance"]
+        C["Gaussian Blur\nSeparable Convolution"]
+        D["Sobel Edge Detection\nGradient Magnitude"]
+        E["Unsharp Mask\nEdge Enhancement"]
+    end
+
+    subgraph Output["Output Stage"]
+        F["Processed BMP"]
+    end
+
+    A -->|"Load Image"| B
+    B -->|"Intermediate Buffer"| C
+    C -->|"Blurred Image"| D
+    D -->|"Edge Map"| E
+    E -->|"Write Output"| F
+
+    class A,F io
+    class B,C,D,E stage
+
 ```
 
 ## 2. Distributed Memory: MPI Halo Exchange Workflow
@@ -31,15 +45,15 @@ sequenceDiagram
     participant R0 as Rank 0 (Master)
     participant R1 as Rank 1 (Worker)
     participant R2 as Rank 2 (Worker)
-    
+
     Note over R0: Load full BMP into Host RAM
     R0->>R1: MPI_Scatterv (Row Chunk 1)
     R0->>R2: MPI_Scatterv (Row Chunk 2)
-    
+
     Note over R0,R2: Parallel Compute: Grayscale (No dependencies)
-    
-    Note over R0,R2: ⚠️ Halo Exchange required for Convolution!
-    
+
+    Note over R0,R2: Halo Exchange Required for Convolution
+
     par R0 <-> R1 Exchange
         R0->>R1: MPI_Sendrecv (Send Bottom Row -> R1 Top Halo)
         R1->>R0: MPI_Sendrecv (Send Top Row -> R0 Bottom Halo)
@@ -47,9 +61,9 @@ sequenceDiagram
         R1->>R2: MPI_Sendrecv (Send Bottom Row -> R2 Top Halo)
         R2->>R1: MPI_Sendrecv (Send Top Row -> R1 Bottom Halo)
     end
-    
+
     Note over R0,R2: Parallel Compute: Blur & Sobel
-    
+
     R1->>R0: MPI_Gatherv (Processed Chunk 1)
     R2->>R0: MPI_Gatherv (Processed Chunk 2)
     Note over R0: Construct Final Array & Save
@@ -58,37 +72,46 @@ sequenceDiagram
 
 ## 3. Massively Parallel: CUDA Execution & Memory Model
 
-The CUDA implementation drastically outperforms the CPU models. This diagram explains why: **PCIe transfer minimization**. 
+The CUDA implementation drastically outperforms the CPU models by leveraging massive thread-level parallelism. 
 
-Instead of copying memory back and forth between the CPU and GPU for every filter, the original image is sent to the GPU once (H2D). All four filter kernels execute sequentially directly in VRAM, reusing allocated device buffers. The image is only copied back to the CPU (D2H) when the entire pipeline is complete.
+The diagram below illustrates the actual lifecycle of a typical filter operation (e.g., Gaussian Blur) within our pipeline. To allow for intermediate disk saves, the host explicitly manages `cudaMemcpy` operations before and after each filter, while the GPU handles the heavy arithmetic intensity via a highly structured Grid and Block execution hierarchy.
 
 ```mermaid
-graph LR
-    subgraph Host (System RAM)
-        direction TB
-        A[Original Image]
-        F[Final Sharpened Image]
+graph TD
+    subgraph Host [Host: System RAM]
+        A[Host Image Buffer]
     end
-    
-    subgraph Device (GPU VRAM)
-        direction TB
-        B[d_data]
-        C[d_temp]
-        D[d_blurred]
-        E[d_grad]
-        
-        B -->|RGB2Gray Kernel| C
-        C -->|OneDBlur Kernel X & Y| D
-        B -->|Sobel Kernel| E
-        D -->|Unsharp Blend Kernel| B
+
+    subgraph Device1 [Device: GPU VRAM — Input]
+        B[Device Buffer: d_src]
     end
-    
+
+    subgraph KernelExec [CUDA Execution Hierarchy]
+        Grid[Grid: numBlocks] --> Block[Block: 16x16 threads]
+        Block --> Thread[Thread: Process Pixel]
+    end
+
+    subgraph Device2 [Device: GPU VRAM — Output]
+        D[Device Buffer: d_dst]
+    end
+
+    Sync((Sync))
+
+    subgraph HostEnd [Host: System RAM]
+        F[Save Intermediate Result]
+    end
+
     A -->|cudaMemcpy H2D| B
-    B -->|cudaMemcpy D2H| F
-    
-    classDef host fill:#fff3e0,stroke:#e65100,stroke-width:2px;
-    classDef device fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px;
-    class A,F host;
-    class B,C,D,E device;
+    B -.->|Global Read| KernelExec
+    KernelExec -.->|Global Write| D
+    D -->|cudaDeviceSynchronize| Sync
+    Sync -->|cudaMemcpy D2H| A
+    A --> F
+
+    class A host
+    class F host
+    class B,D device
+    class Grid,Block,Thread kernel
+    class Sync sync
 ```
-*Why this diagram adds value: It proves you understand the most critical bottleneck in GPGPU programming—host-to-device memory transfer latency—and have engineered a pipeline to avoid it.*
+*Why this diagram adds value: It proves you understand the intricate execution model of CUDA (Host vs. Device distinction, manual memory transfers, and the Thread/Block/Grid mapping).*
