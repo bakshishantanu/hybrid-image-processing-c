@@ -1,0 +1,67 @@
+# ==============================================================================
+# Executables & Build Artifacts
+# ==============================================================================
+*.exe
+*.obj
+*.o
+*.out
+*.dll
+*.lib
+
+# ==============================================================================
+# Profiling & Diagnostics
+# ==============================================================================
+gmon.out
+profile_*.txt
+*.sqlite
+*.qdrep
+*.nsys-rep
+
+# ==============================================================================
+# Generated Image Artifacts
+# ==============================================================================
+# Ignore intermediate and output images generated during benchmarking/testing
+*_gray.bmp
+*_blur.bmp
+*_sobel.bmp
+*_unsharp.bmp
+_tmp_*.bmp
+_t_*.bmp
+_ref_*.bmp
+
+# DO NOT ignore the raw input datasets in data/
+!data/cat_portrait.bmp
+!data/satellite.bmp
+!data/texture.bmp
+!data/cityscape.bmp
+!data/architecture.bmp
+!data/synthetic_noise.bmp
+
+# ==============================================================================
+# Graphify Outputs
+# ==============================================================================
+# Ignore all Graphify generated knowledge graphs, caches, and metadata
+graphify-out/
+.graphify/
+
+# ==============================================================================
+# IDE & Environment Files
+# ==============================================================================
+.vscode/
+.vs/
+*.suo
+*.user
+*.workspace
+.idea/
+
+# ==============================================================================
+# OS Generated Files
+# ==============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
