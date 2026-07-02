@@ -7,7 +7,7 @@ This document illustrates the core architectural concepts of the Hybrid Image Pr
 The core pipeline is identical across all models. The filters run in a strict sequence because each stage depends on the exact output of the preceding stage. By executing these sequentially but parallelizing the *internal workload* of each filter, we maximize throughput.
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph Input["Input Stage"]
         A["24-bit BMP Image"]
     end
@@ -31,7 +31,6 @@ flowchart LR
 
     class A,F io
     class B,C,D,E stage
-
 ```
 
 ## 2. Distributed Memory: MPI Halo Exchange Workflow
